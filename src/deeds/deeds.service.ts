@@ -146,11 +146,25 @@ export class DeedsService {
       }
       const deed_id = await this.getUserDeedId(this.postgresService, user_id, category);
       const rows = await this.postgresService.query<DeedItemResult>(`
-        SELECT deed_item_id, deed_id, parent_deed_item_id, name, description, display_order, hide_type, created_at
-        FROM deed_items
-        WHERE deed_id = $1
-        ORDER BY display_order ASC, deed_item_id ASC
-      `, [deed_id]);
+        SELECT di.deed_item_id, di.deed_id, di.parent_deed_item_id, di.name, di.description, di.display_order, di.hide_type, di.created_at, lr.last_recorded_at, lr.type
+        FROM deed_items di
+        LEFT JOIN LATERAL (
+          SELECT
+            r.created_at AS last_recorded_at,
+            CASE
+              WHEN r.scale_item_id IS NOT NULL THEN 'scale'
+              WHEN r.count_value IS NOT NULL THEN 'count'
+              ELSE NULL
+            END AS type
+          FROM records r
+          WHERE r.deed_item_id = di.deed_item_id
+            AND r.user_id = $2
+          ORDER BY r.date DESC, r.created_at DESC, r.record_id DESC
+          LIMIT 1
+        ) lr ON true
+        WHERE di.deed_id = $1
+        ORDER BY di.display_order ASC, di.deed_item_id ASC
+      `, [deed_id, user_id]);
       const itemsById = new Map<number, DeedItemResult>();
       const roots: DeedItemResult[] = [];
       for (const row of rows) {

@@ -31,3 +31,12 @@ export class CreateRecordsDto {
   @Type(() => CreateRecordItemDto)
   records: CreateRecordItemDto[];
 }
+
+export class DeleteRecordsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  record_ids: number[];
+}

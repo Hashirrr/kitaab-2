@@ -2,6 +2,7 @@ import type { UserTableRow, VisitorAssociationRow } from '../users/users.interfa
 
 export type DeedCategoryType = 'hasanaat' | 'saiyyiaat';
 
+export type DeedType = 'scale' | 'count';
 export type HideType = 'none' | 'hide_from_all' | 'hide_from_graphs';
 export type DeedAnalyticsType = 'deeds_table' | 'category' | 'users_association' | 'visitors_association' | 'parent_deed_association';
 
@@ -20,8 +21,10 @@ export interface DeedItemResult {
   hide_type: HideType;
   deed_item_id: number;
   display_order: number;
+  type: DeedType | null;
   description: string | null;
   children?: DeedItemResult[];
+  last_recorded_at: Date | null;
   parent_deed_item_id: number | null;
 }
 

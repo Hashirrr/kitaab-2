@@ -169,6 +169,8 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
           display_order: 1,
           hide_type: 'none',
           created_at: createdAt,
+          type: null,
+          last_recorded_at: null,
         },
         {
           deed_item_id: 11,
@@ -179,6 +181,8 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
           display_order: 1,
           hide_type: 'none',
           created_at: createdAt,
+          type: null,
+          last_recorded_at: null,
         },
         {
           deed_item_id: 12,
@@ -189,6 +193,8 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
           display_order: 1,
           hide_type: 'none',
           created_at: createdAt,
+          type: null,
+          last_recorded_at: null,
         },
       ]);
 
@@ -207,6 +213,8 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
             display_order: 1,
             hide_type: 'none',
             created_at: createdAt.toISOString(),
+            type: null,
+            last_recorded_at: null,
             children: [
               {
                 deed_item_id: 11,
@@ -217,6 +225,8 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
                 display_order: 1,
                 hide_type: 'none',
                 created_at: createdAt.toISOString(),
+                type: null,
+                last_recorded_at: null,
                 children: [
                   {
                     deed_item_id: 12,
@@ -227,10 +237,110 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
                     display_order: 1,
                     hide_type: 'none',
                     created_at: createdAt.toISOString(),
+                    type: null,
+                    last_recorded_at: null,
                   },
                 ],
               },
             ],
+          },
+        ]);
+      });
+
+    expect(postgresQueryMock).toHaveBeenCalledTimes(2);
+    const [, queryParams] = postgresQueryMock.mock.calls[1];
+    expect(queryParams).toEqual([5, 1]);
+  });
+
+  it('-> 200 returns deed items with scale and count types and last_recorded_at', async () => {
+    jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
+
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const lastRecordedAtScale = new Date('2026-03-10T15:30:00.000Z');
+    const lastRecordedAtCount = new Date('2026-03-12T18:00:00.000Z');
+
+    postgresQueryMock
+      .mockResolvedValueOnce([{ deed_id: 5 }])
+      .mockResolvedValueOnce([
+        {
+          deed_item_id: 10,
+          deed_id: 5,
+          parent_deed_item_id: null,
+          name: 'Scale Deed',
+          description: 'Scale Deed description',
+          display_order: 1,
+          hide_type: 'none',
+          created_at: createdAt,
+          type: 'scale',
+          last_recorded_at: lastRecordedAtScale,
+        },
+        {
+          deed_item_id: 20,
+          deed_id: 5,
+          parent_deed_item_id: null,
+          name: 'Count Deed',
+          description: null,
+          display_order: 2,
+          hide_type: 'none',
+          created_at: createdAt,
+          type: 'count',
+          last_recorded_at: lastRecordedAtCount,
+        },
+        {
+          deed_item_id: 30,
+          deed_id: 5,
+          parent_deed_item_id: null,
+          name: 'Unrecorded Deed',
+          description: null,
+          display_order: 3,
+          hide_type: 'none',
+          created_at: createdAt,
+          type: null,
+          last_recorded_at: null,
+        },
+      ]);
+
+    await request(app.getHttpServer())
+      .get('/deeds/hasanaat/items')
+      .set('Authorization', 'Bearer access-token')
+      .expect(200)
+      .expect((res) => {
+        expect(res.body).toEqual([
+          {
+            deed_item_id: 10,
+            deed_id: 5,
+            parent_deed_item_id: null,
+            name: 'Scale Deed',
+            description: 'Scale Deed description',
+            display_order: 1,
+            hide_type: 'none',
+            created_at: createdAt.toISOString(),
+            type: 'scale',
+            last_recorded_at: lastRecordedAtScale.toISOString(),
+          },
+          {
+            deed_item_id: 20,
+            deed_id: 5,
+            parent_deed_item_id: null,
+            name: 'Count Deed',
+            description: null,
+            display_order: 2,
+            hide_type: 'none',
+            created_at: createdAt.toISOString(),
+            type: 'count',
+            last_recorded_at: lastRecordedAtCount.toISOString(),
+          },
+          {
+            deed_item_id: 30,
+            deed_id: 5,
+            parent_deed_item_id: null,
+            name: 'Unrecorded Deed',
+            description: null,
+            display_order: 3,
+            hide_type: 'none',
+            created_at: createdAt.toISOString(),
+            type: null,
+            last_recorded_at: null,
           },
         ]);
       });

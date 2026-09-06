@@ -1,5 +1,5 @@
-import { CreateRecordsDto } from './records.dto';
 import { Logger } from '../logger/logger.service';
+import { CreateRecordsDto, DeleteRecordsDto } from './records.dto';
 import type { AuthenticatedRequest } from '../auth/auth.interface';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
@@ -115,6 +115,40 @@ export class RecordsService {
           AND date = $2::date
         ORDER BY record_id ASC
       `, [user_id, date]);
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async deleteRecords(payload: DeleteRecordsDto, req: AuthenticatedRequest): Promise<void> {
+    try {
+      this.loggerService.log('deleteRecords {controller}');
+      const { sub: user_id, type: token_type } = req.user;
+      if (token_type !== 'access') {
+        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
+      }
+
+      const { record_ids } = payload;
+      if (new Set(record_ids).size !== record_ids.length) {
+        this.loggerService.error('Duplicate record ids in payload', HttpStatus.BAD_REQUEST);
+        throw new HttpException('Duplicate record ids in payload', HttpStatus.BAD_REQUEST);
+      }
+
+      await this.postgresService.transaction(async (client) => {
+        const rows = await client.query<{ record_id: number }>(`
+          DELETE FROM records
+          WHERE user_id = $1
+            AND record_id = ANY($2::bigint[])
+          RETURNING record_id
+        `, [user_id, record_ids]);
+
+        if (rows.length !== record_ids.length) {
+          this.loggerService.error('One or more records not found', HttpStatus.NOT_FOUND);
+          throw new HttpException('One or more records not found', HttpStatus.NOT_FOUND);
+        }
+      });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
