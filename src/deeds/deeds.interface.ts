@@ -21,7 +21,7 @@ export interface DeedItemResult {
   hide_type: HideType;
   deed_item_id: number;
   display_order: number;
-  type: DeedType | null;
+  type?: DeedType | null;
   description: string | null;
   children?: DeedItemResult[];
   last_recorded_at: Date | null;

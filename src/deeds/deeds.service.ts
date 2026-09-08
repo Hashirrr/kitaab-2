@@ -166,6 +166,9 @@ export class DeedsService {
         ORDER BY di.display_order ASC, di.deed_item_id ASC
       `, [deed_id, user_id]);
       const itemsById = new Map<number, DeedItemResult>();
+      for (const row of rows)
+        itemsById.set(row.deed_item_id, { ...row, children: undefined });
+  
       const roots: DeedItemResult[] = [];
       for (const row of rows) {
         itemsById.set(row.deed_item_id, { ...row });
@@ -183,6 +186,39 @@ export class DeedsService {
         parent.children ??= [];
         parent.children.push(item);
       }
+      
+      const populateParentData = (item: DeedItemResult): void => {
+        if (!item.children?.length) return;
+      
+        for (const child of item.children)
+          populateParentData(child);
+      
+        const latestChild = item.children
+          .filter((child) => child.last_recorded_at)
+          .sort((a, b) =>
+            new Date(b.last_recorded_at!).getTime() - new Date(a.last_recorded_at!).getTime()
+          )[0];
+      
+        item.last_recorded_at = latestChild?.last_recorded_at ?? null;
+      
+        const childTypes = new Set(item.children.map((child) => child.type).filter((type) => type !== null));
+      
+        if (childTypes.has('scale')) {
+          item.type = 'scale';
+        } else if (childTypes.has('count')) {
+          item.type = 'count';
+        }
+      
+        for (const child of item.children) delete child.type;
+      };
+  
+      for (const root of roots) {
+        populateParentData(root);
+  
+        if (root.children?.length)
+          for (const child of root.children) delete child.type;
+      }
+
       return roots;
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

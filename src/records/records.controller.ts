@@ -1,6 +1,6 @@
 import { RecordsService } from './records.service';
-import { RecordResult } from './records.interface';
-import { CreateRecordsDto, DeleteRecordsDto } from './records.dto';
+import { DeedAnalyticsResult, RecordResult } from './records.interface';
+import { CreateRecordsDto, DeleteRecordsDto, GetRecordsAnalyticsDto } from './records.dto';
 import type { AuthenticatedRequest } from '../auth/auth.interface';
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Req } from '@nestjs/common';
 
@@ -24,5 +24,14 @@ export class RecordsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteRecords(@Body() body: DeleteRecordsDto, @Req() req: AuthenticatedRequest): Promise<void> {
     await this.recordsService.deleteRecords(body, req);
+  }
+
+  @Post('analytics')
+  @HttpCode(HttpStatus.OK)
+  async getRecordsAnalytics(@Body() payload: GetRecordsAnalyticsDto, @Req() req: AuthenticatedRequest): Promise<DeedAnalyticsResult[]> {
+    return this.recordsService.getRecordsAnalytics(
+      payload,
+      req,
+    );
   }
 }

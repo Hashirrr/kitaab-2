@@ -40,3 +40,11 @@ export class DeleteRecordsDto {
   @Min(1, { each: true })
   record_ids: number[];
 }
+
+export class GetRecordsAnalyticsDto {
+  @IsDateString()
+  start_date: string;
+
+  @IsDateString()
+  end_date: string;
+}

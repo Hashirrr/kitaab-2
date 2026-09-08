@@ -1,9 +1,9 @@
 import { Logger } from '../logger/logger.service';
-import { CreateRecordsDto, DeleteRecordsDto } from './records.dto';
+import { CreateRecordsDto, DeleteRecordsDto, GetRecordsAnalyticsDto } from './records.dto';
 import type { AuthenticatedRequest } from '../auth/auth.interface';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import { DeedItemOwnerQueryInterface, RecordResult, ScaleItemOwnerQueryInterface } from './records.interface';
+import { CountAnalytics, DeedAnalyticsQueryInterface, DeedAnalyticsResult, DeedItemOwnerQueryInterface, RecordResult, ScaleItemOwnerQueryInterface } from './records.interface';
 
 @Injectable()
 export class RecordsService {
@@ -149,6 +149,109 @@ export class RecordsService {
           throw new HttpException('One or more records not found', HttpStatus.NOT_FOUND);
         }
       });
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async getRecordsAnalytics(payload: GetRecordsAnalyticsDto, req: AuthenticatedRequest): Promise<DeedAnalyticsResult[]> {
+    try {
+      this.loggerService.log('getRecordsAnalytics {controller}');
+      const { sub: user_id, type: token_type } = req.user;
+      if (token_type !== 'access') {
+        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
+      }
+      const { start_date, end_date } = payload;
+      if (start_date > end_date) {
+        this.loggerService.error('Start date cannot be greater than end date', HttpStatus.BAD_REQUEST);
+        throw new HttpException('Start date cannot be greater than end date', HttpStatus.BAD_REQUEST);
+      }
+  
+      const rows = await this.postgresService.query<DeedAnalyticsQueryInterface>(`
+        SELECT
+          di.deed_item_id,
+          di.name AS deed_name,
+          CASE WHEN s.scale_id IS NOT NULL THEN 'scale' ELSE 'count' END AS deed_type,
+          to_char(r.date, 'YYYY-MM-DD') AS date,
+          r.count_value,
+          r.scale_item_id,
+          si.name AS scale_name
+        FROM deed_items di
+
+        INNER JOIN deeds d
+          ON d.deed_id = di.deed_id
+
+        LEFT JOIN scales s
+          ON s.deed_item_id = COALESCE(di.parent_deed_item_id, di.deed_item_id)
+
+        LEFT JOIN records r
+          ON r.deed_item_id = di.deed_item_id
+          AND r.user_id = $1
+          AND r.date BETWEEN $2::date AND $3::date
+
+        LEFT JOIN scale_items si
+          ON si.scale_items_id = r.scale_item_id
+
+        WHERE d.user_id = $1
+
+        ORDER BY
+          di.display_order ASC,
+          r.date ASC
+      `, [user_id, start_date, end_date]);
+
+      const deeds = new Map<number, DeedAnalyticsResult>();
+
+      for (const row of rows) {
+        const deedItemId = Number(row.deed_item_id);
+        if (!deeds.has(deedItemId))
+          deeds.set(deedItemId, {
+            deed_item_id: deedItemId,
+            name: row.deed_name,
+            type: row.deed_type,
+            data: []
+          });
+  
+        const deed = deeds.get(deedItemId)!;
+  
+        if (row.deed_type === 'count' && row.date !== null && row.count_value !== null)
+          (deed.data as CountAnalytics[]).push({
+            date: row.date,
+            count: Number(row.count_value)
+          });
+      }
+
+      const scaleCounts = new Map<number, Map<string, number>>();
+  
+      for (const row of rows) {
+        if (row.deed_type !== 'scale' || row.scale_name === null)
+          continue;
+  
+        const deedItemId = Number(row.deed_item_id);
+        if (!scaleCounts.has(deedItemId))
+          scaleCounts.set(deedItemId, new Map<string, number>());
+  
+        const scaleMap = scaleCounts.get(deedItemId)!;
+  
+        scaleMap.set(row.scale_name, (scaleMap.get(row.scale_name) ?? 0) + 1);
+      }
+
+      for (const [deedItemId, scaleMap] of scaleCounts) {
+        const deed = deeds.get(deedItemId);
+  
+        if (!deed) continue;
+
+        const total = [...scaleMap.values()].reduce((sum, count) => sum + count, 0);
+  
+        deed.data = [...scaleMap.entries()].map(
+          ([name, count]) => ({
+            name,
+            percentage: Number(((count / total) * 100).toFixed(2))
+          })
+        );
+      }
+      return [...deeds.values()];
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

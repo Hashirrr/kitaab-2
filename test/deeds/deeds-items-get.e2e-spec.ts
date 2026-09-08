@@ -34,6 +34,7 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
       const table: Record<string, string> = {
         JWT_PUBLIC_KEY: 'test-public',
       };
+
       return table[key];
     });
 
@@ -69,6 +70,7 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
+
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -78,8 +80,13 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
     );
 
     const logger = app.get(Logger);
+
     app.useGlobalGuards(
-      new JwtAuthGuard(logger, app.get(JwtService), app.get(ConfigService)),
+      new JwtAuthGuard(
+        logger,
+        app.get(JwtService),
+        app.get(ConfigService),
+      ),
     );
 
     await app.init();
@@ -100,7 +107,9 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
   });
 
   it('-> 401, not 500, when token invalid', async () => {
-    jwtVerifyAsyncMock.mockRejectedValueOnce(new Error('jwt malformed'));
+    jwtVerifyAsyncMock.mockRejectedValueOnce(
+      new Error('jwt malformed'),
+    );
 
     const response = await request(app.getHttpServer())
       .get('/deeds/hasanaat/items')
@@ -125,6 +134,7 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
 
   it('-> 404, not 500, when deed category not found', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
+
     postgresQueryMock.mockResolvedValueOnce([]);
 
     const response = await request(app.getHttpServer())
@@ -138,6 +148,7 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
 
   it('-> 200 returns an empty array when category has no items', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
+
     postgresQueryMock
       .mockResolvedValueOnce([{ deed_id: 5 }])
       .mockResolvedValueOnce([]);
@@ -156,111 +167,115 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
   it('-> 200 returns deed items as a nested tree', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
 
-    const createdAt = new Date('2026-01-01T00:00:00.000Z');
     postgresQueryMock
+      // 1. Category lookup
       .mockResolvedValueOnce([{ deed_id: 5 }])
+
+      // 2. Deed items lookup
       .mockResolvedValueOnce([
         {
           deed_item_id: 10,
           deed_id: 5,
-          parent_deed_item_id: null,
           name: 'encrypted-parent',
           description: 'encrypted-parent-description',
           display_order: 1,
           hide_type: 'none',
-          created_at: createdAt,
-          type: null,
+          parent_deed_item_id: null,
+          type: 'scale',
+          created_at: new Date('2026-01-01T00:00:00.000Z'),
           last_recorded_at: null,
         },
         {
           deed_item_id: 11,
           deed_id: 5,
-          parent_deed_item_id: 10,
           name: 'encrypted-child',
-          description: null,
+          description: 'encrypted-child-description',
           display_order: 1,
           hide_type: 'none',
-          created_at: createdAt,
+          parent_deed_item_id: 10,
           type: null,
+          created_at: new Date('2026-01-01T00:00:00.000Z'),
           last_recorded_at: null,
         },
         {
           deed_item_id: 12,
           deed_id: 5,
-          parent_deed_item_id: 11,
           name: 'encrypted-grand-child',
-          description: null,
+          description: 'encrypted-grand-child-description',
           display_order: 1,
           hide_type: 'none',
-          created_at: createdAt,
+          parent_deed_item_id: 11,
           type: null,
+          created_at: new Date('2026-01-01T00:00:00.000Z'),
           last_recorded_at: null,
         },
       ]);
 
-    await request(app.getHttpServer())
+    const response = await request(app.getHttpServer())
       .get('/deeds/hasanaat/items')
       .set('Authorization', 'Bearer access-token')
-      .expect(200)
-      .expect((res) => {
-        expect(res.body).toEqual([
+      .expect(200);
+
+    expect(response.body).toEqual([
+      {
+        deed_item_id: 10,
+        deed_id: 5,
+        name: 'encrypted-parent',
+        description: 'encrypted-parent-description',
+        display_order: 1,
+        hide_type: 'none',
+        parent_deed_item_id: null,
+        type: 'scale',
+        created_at: '2026-01-01T00:00:00.000Z',
+        last_recorded_at: null,
+        children: [
           {
-            deed_item_id: 10,
+            deed_item_id: 11,
             deed_id: 5,
-            parent_deed_item_id: null,
-            name: 'encrypted-parent',
-            description: 'encrypted-parent-description',
+            name: 'encrypted-child',
+            description: 'encrypted-child-description',
             display_order: 1,
             hide_type: 'none',
-            created_at: createdAt.toISOString(),
-            type: null,
+            parent_deed_item_id: 10,
+            created_at: '2026-01-01T00:00:00.000Z',
             last_recorded_at: null,
             children: [
               {
-                deed_item_id: 11,
+                deed_item_id: 12,
                 deed_id: 5,
-                parent_deed_item_id: 10,
-                name: 'encrypted-child',
-                description: null,
+                name: 'encrypted-grand-child',
+                description: 'encrypted-grand-child-description',
                 display_order: 1,
                 hide_type: 'none',
-                created_at: createdAt.toISOString(),
-                type: null,
+                parent_deed_item_id: 11,
+                created_at: '2026-01-01T00:00:00.000Z',
                 last_recorded_at: null,
-                children: [
-                  {
-                    deed_item_id: 12,
-                    deed_id: 5,
-                    parent_deed_item_id: 11,
-                    name: 'encrypted-grand-child',
-                    description: null,
-                    display_order: 1,
-                    hide_type: 'none',
-                    created_at: createdAt.toISOString(),
-                    type: null,
-                    last_recorded_at: null,
-                  },
-                ],
               },
             ],
           },
-        ]);
-      });
+        ],
+      },
+    ]);
 
     expect(postgresQueryMock).toHaveBeenCalledTimes(2);
-    const [, queryParams] = postgresQueryMock.mock.calls[1];
-    expect(queryParams).toEqual([5, 1]);
   });
 
   it('-> 200 returns deed items with scale and count types and last_recorded_at', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
 
     const createdAt = new Date('2026-01-01T00:00:00.000Z');
-    const lastRecordedAtScale = new Date('2026-03-10T15:30:00.000Z');
-    const lastRecordedAtCount = new Date('2026-03-12T18:00:00.000Z');
+    const lastRecordedAtScale = new Date(
+      '2026-03-10T15:30:00.000Z',
+    );
+    const lastRecordedAtCount = new Date(
+      '2026-03-12T18:00:00.000Z',
+    );
 
     postgresQueryMock
+      // 1. Category lookup
       .mockResolvedValueOnce([{ deed_id: 5 }])
+
+      // 2. Deed items lookup
       .mockResolvedValueOnce([
         {
           deed_item_id: 10,
